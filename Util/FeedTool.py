@@ -154,7 +154,9 @@ def parse_rss_entries(url, retries=3):
 			for entry in parsed_feed.entries:
 				if entry.get("published"):
 					try:
-						published_time = parser.parse(entry.get("published"))
+						# 清理时间字符串中的多余空格
+						published_time_str = ' '.join(entry.get("published").split())
+						published_time = parser.parse(published_time_str)
 					except Exception as e:
 						print(f"时间解析错误: {entry.get('published')}, 错误信息: {e}")
 						published_time = datetime.now(timezone.utc)
