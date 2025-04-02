@@ -7,10 +7,33 @@ import requests
 from datetime import datetime, timezone, timedelta
 from dateutil import parser
 import time
+import io
+from urllib.parse import urlparse
+import base64
 
 now = datetime.now(timezone.utc)
 load_time = 60  # 导入60天内的内容
 
+def download_and_encode_image(image_url):
+	"""
+	下载图片并转换为 base64 编码
+	"""
+	try:
+		response = requests.get(image_url, timeout=10)
+		if response.status_code == 200:
+			# 获取图片的 MIME 类型
+			content_type = response.headers.get('content-type', 'image/jpeg')
+			# 将图片内容转换为 base64
+			image_data = base64.b64encode(response.content).decode('utf-8')
+			return {
+				'type': 'file',
+				'file': {
+					'url': f'data:{content_type};base64,{image_data}'
+				}
+			}
+	except Exception as e:
+		print(f"下载图片失败: {image_url}, 错误: {str(e)}")
+	return None
 
 def parse_rss_entries(url, retries=3):
 	entries = []
@@ -71,7 +94,20 @@ def parse_rss_entries(url, retries=3):
 					
 					# 处理图片
 					cover_list = content.find_all('img')
-					src = None if not cover_list else cover_list[0]['src']
+					src = None
+					if cover_list:
+						img_src = cover_list[0].get('src', '')
+						# 处理相对路径
+						if img_src.startswith('//'):
+							img_src = 'https:' + img_src
+						elif img_src.startswith('/'):
+							# 从 entry.link 中提取域名
+							parsed_url = urlparse(entry.get("link", ""))
+							base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+							img_src = base_url + img_src
+						
+						# 下载并编码图片
+						src = download_and_encode_image(img_src)
 					
 					entries.append(
 						{
@@ -202,11 +238,9 @@ class NotionAPI:
 		}
 
 		# 如果有封面图片，添加封面属性
-		if entry.get("cover"):
-			payload["cover"] = {
-				"type": "external",
-				"external": {"url": entry.get("cover")}
-			}
+		cover_data = entry.get("cover")
+		if cover_data:
+			payload["cover"] = cover_data
 
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
 		print(res.status_code)
