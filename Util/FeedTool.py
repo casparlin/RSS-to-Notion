@@ -76,12 +76,15 @@ def parse_rss_entries(url, retries=3):
 					cover_list = content.find_all('img')
 					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
 					
+					# 使用原有的处理逻辑，保持2000字符限制
+					summary = re.sub(r"<.*?>|\n*", "", formatted_content)[:2000]
+					
 					entries.append(
 						{
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": formatted_content[:2000],
+							"summary": summary,
 							"content": entry.get("content"),
 							"cover": src
 						}
