@@ -172,6 +172,9 @@ def parse_rss_entries(url, retries=3):
 					print(f"警告：发现未来时间 {published_time}，将使用当前时间")
 					published_time = datetime.now(timezone.utc)
 				
+				# 打印每个条目的标题和发布时间
+				print(f"解析条目: {entry.get('title')} - 发布时间: {published_time}")
+				
 				if now - published_time < timedelta(days=load_time):
 					# 获取所有图片
 					cover = BeautifulSoup(entry.get("summary"),'html.parser')
@@ -209,13 +212,22 @@ def parse_rss_entries(url, retries=3):
 						}
 					)
 
+			# 打印排序前的条目数量
+			print(f"排序前条目数量: {len(entries)}")
+			
 			# 对 entries 按发布时间进行排序（最新的在前）
 			try:
 				entries = sorted(entries, key=lambda x: parser.parse(x['time']), reverse=True)
+				# 打印排序后的条目标题
+				for i, entry in enumerate(entries):
+					print(f"排序后条目 {i+1}: {entry['title']} - 发布时间: {entry['time']}")
 			except Exception as e:
 				print(f"排序时发生错误: {e}")
 				# 如果排序失败，保持原始顺序
 				pass
+			
+			# 打印最终返回的条目数量
+			print(f"最终返回条目数量: {len(entries[:50])}")
 			
 			return feeds, entries[:50]
 			# return feeds, entries[:3]	
