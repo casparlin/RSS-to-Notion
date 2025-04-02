@@ -71,7 +71,7 @@ def parse_rss_entries(url, retries=3):
 					
 					# 处理图片
 					cover_list = content.find_all('img')
-					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
+					src = None if not cover_list else cover_list[0]['src']
 					
 					entries.append(
 						{
@@ -165,14 +165,9 @@ class NotionAPI:
 		return:
 		api response from notion
 		"""
-		# print(entry.get("cover"))
-		# Construct post request to reading database
+		# 构建基本属性
 		payload = {
 			"parent": {"database_id": self.reader_id},
-			"cover": {
-				"type": "external",
-				"external": {"url": entry.get("cover")}
-			},
 			"properties": {
 				"Name": {
 					"title": [
@@ -205,9 +200,15 @@ class NotionAPI:
 				}
 			],
 		}
+
+		# 如果有封面图片，添加封面属性
+		if entry.get("cover"):
+			payload["cover"] = {
+				"type": "external",
+				"external": {"url": entry.get("cover")}
+			}
+
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
-
-
 		print(res.status_code)
 		return res
 	
