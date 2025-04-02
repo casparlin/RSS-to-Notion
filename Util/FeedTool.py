@@ -263,11 +263,6 @@ class NotionAPI:
 					"select": {
 						"name": entry.get("content_type", "简讯")
 					}
-				},
-				"Status": {
-					"select": {
-						"name": entry.get("status", "未读")
-					}
 				}
 			},
 			"children": entry.get("notion_blocks", [])  # 使用转换后的Notion块
