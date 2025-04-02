@@ -7,39 +7,10 @@ import requests
 from datetime import datetime, timezone, timedelta
 from dateutil import parser
 import time
-import io
-from urllib.parse import urlparse
-import base64
 
 now = datetime.now(timezone.utc)
 load_time = 60  # 导入60天内的内容
 
-def download_and_encode_image(image_url):
-	"""
-	下载图片并转换为 base64 编码
-	"""
-	print(f"\n开始处理图片: {image_url}")
-	try:
-		response = requests.get(image_url, timeout=10)
-		print(f"图片下载状态码: {response.status_code}")
-		if response.status_code == 200:
-			# 获取图片的 MIME 类型
-			content_type = response.headers.get('content-type', 'image/jpeg')
-			print(f"图片类型: {content_type}")
-			# 将图片内容转换为 base64
-			image_data = base64.b64encode(response.content).decode('utf-8')
-			print(f"图片大小: {len(image_data)} bytes")
-			return {
-				'type': 'file',
-				'file': {
-					'url': f'data:{content_type};base64,{image_data}'
-				}
-			}
-		else:
-			print(f"图片下载失败，状态码: {response.status_code}")
-	except Exception as e:
-		print(f"下载图片失败: {image_url}, 错误: {str(e)}")
-	return None
 
 def parse_rss_entries(url, retries=3):
 	entries = []
@@ -80,61 +51,20 @@ def parse_rss_entries(url, retries=3):
 				if not published_time.tzinfo:
 					published_time = published_time.replace(tzinfo=timezone(timedelta(hours=8)))
 				if now - published_time < timedelta(days=load_time):
-					# 处理HTML内容
-					content = BeautifulSoup(entry.get("summary"), 'html.parser')
-					
-					# 处理HTML实体
-					content_text = content.get_text()
-					content_text = content_text.replace('&nbsp;', ' ')
-					
-					# 将HTML标签转换为换行
-					for tag in content.find_all(['p', 'div', 'br']):
-						tag.replace_with(tag.get_text() + '\n\n')
-					
-					# 获取处理后的文本
-					formatted_content = content.get_text()
-					
-					# 清理多余的空白字符，但保留段落间的换行
-					formatted_content = re.sub(r'\n\s*\n\s*\n', '\n\n', formatted_content)
-					formatted_content = formatted_content.strip()
-					
-					# 处理图片
-					cover_list = content.find_all('img')
-					print(f"\n找到 {len(cover_list)} 个图片标签")
-					src = None
-					if cover_list:
-						img_src = cover_list[0].get('src', '')
-						print(f"原始图片链接: {img_src}")
-						# 处理相对路径
-						if img_src.startswith('//'):
-							img_src = 'https:' + img_src
-							print(f"处理协议相对路径后的链接: {img_src}")
-						elif img_src.startswith('/'):
-							# 从 entry.link 中提取域名
-							parsed_url = urlparse(entry.get("link", ""))
-							base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-							img_src = base_url + img_src
-							print(f"处理根相对路径后的链接: {img_src}")
-						
-						# 下载并编码图片
-						src = download_and_encode_image(img_src)
-						if src:
-							print("图片处理成功")
-						else:
-							print("图片处理失败")
-					else:
-						print("未找到图片标签")
-					
+					cover = BeautifulSoup(entry.get("summary"),'html.parser')
+					cover_list = cover.find_all('img')
+					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
+					# Use re.search to find the first match
 					entries.append(
 						{
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": formatted_content[:2000],
+							"summary": re.sub(r"<.*?>|\n*", "", entry.get("summary"))[:2000],
 							"content": entry.get("content"),
 							"cover": src
 						}
-					)
+				)
 
 			return feeds, entries[:50]
 			# return feeds, entries[:3]	
@@ -217,9 +147,14 @@ class NotionAPI:
 		return:
 		api response from notion
 		"""
-		# 构建基本属性
+		# print(entry.get("cover"))
+		# Construct post request to reading database
 		payload = {
 			"parent": {"database_id": self.reader_id},
+			"cover": {
+				"type": "external",
+				"external": {"url": entry.get("cover")}
+			},
 			"properties": {
 				"Name": {
 					"title": [
@@ -252,13 +187,9 @@ class NotionAPI:
 				}
 			],
 		}
-
-		# 如果有封面图片，添加封面属性
-		cover_data = entry.get("cover")
-		if cover_data:
-			payload["cover"] = cover_data
-
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
+
+
 		print(res.status_code)
 		return res
 	
