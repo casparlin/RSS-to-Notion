@@ -51,20 +51,41 @@ def parse_rss_entries(url, retries=3):
 				if not published_time.tzinfo:
 					published_time = published_time.replace(tzinfo=timezone(timedelta(hours=8)))
 				if now - published_time < timedelta(days=load_time):
-					cover = BeautifulSoup(entry.get("summary"),'html.parser')
-					cover_list = cover.find_all('img')
+					# 处理HTML内容
+					content = BeautifulSoup(entry.get("summary"), 'html.parser')
+					
+					# 处理HTML实体
+					content_text = content.get_text()
+					content_text = content_text.replace('&nbsp;', ' ')
+					
+					# 优化段落分隔
+					paragraphs = []
+					for p in content.find_all(['p', 'div']):
+						text = p.get_text().strip()
+						if text:
+							paragraphs.append(text)
+					
+					# 如果没有找到段落标签，则按换行符分割
+					if not paragraphs:
+						paragraphs = [p.strip() for p in content_text.split('\n') if p.strip()]
+					
+					# 合并段落，保持适当的间距
+					formatted_content = '\n\n'.join(paragraphs)
+					
+					# 处理图片
+					cover_list = content.find_all('img')
 					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
-					# Use re.search to find the first match
+					
 					entries.append(
 						{
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": re.sub(r"<.*?>|\n*", "", entry.get("summary"))[:2000],
+							"summary": formatted_content[:2000],
 							"content": entry.get("content"),
 							"cover": src
 						}
-				)
+					)
 
 			return feeds, entries[:50]
 			# return feeds, entries[:3]	
