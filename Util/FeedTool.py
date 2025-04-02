@@ -88,6 +88,14 @@ def convert_html_to_notion_blocks(html_content):
 						"rich_text": [{"type": "text", "text": {"content": figcaption.get_text()}}]
 					}
 				})
+		elif element.name == 'img' and element.get('src'):
+			blocks.append({
+				"type": "image",
+				"image": {
+					"type": "external",
+					"external": {"url": element['src']}
+				}
+			})
 	
 	return blocks
 
@@ -130,9 +138,20 @@ def parse_rss_entries(url, retries=3):
 				if not published_time.tzinfo:
 					published_time = published_time.replace(tzinfo=timezone(timedelta(hours=8)))
 				if now - published_time < timedelta(days=load_time):
+					# 获取所有图片
 					cover = BeautifulSoup(entry.get("summary"),'html.parser')
-					cover_list = cover.find_all('img')
-					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
+					all_images = cover.find_all('img')
+					
+					# 选择最合适的封面图片
+					cover_image = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg"
+					if all_images:
+						# 优先选择figure中的图片
+						figure_images = cover.find_all('figure')
+						if figure_images:
+							cover_image = figure_images[0].find('img')['src']
+						else:
+							# 如果没有figure中的图片，使用第一张图片
+							cover_image = all_images[0]['src']
 					
 					# 转换HTML内容为Notion块
 					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
@@ -147,7 +166,7 @@ def parse_rss_entries(url, retries=3):
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
 							"summary": entry.get("summary"),  # 保留原始HTML内容
 							"content": entry.get("content"),
-							"cover": src,
+							"cover": cover_image,
 							"notion_blocks": notion_blocks,  # 添加转换后的Notion块
 							"content_type": content_type  # 添加内容类型
 						}
