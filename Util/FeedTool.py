@@ -58,33 +58,27 @@ def parse_rss_entries(url, retries=3):
 					content_text = content.get_text()
 					content_text = content_text.replace('&nbsp;', ' ')
 					
-					# 优化段落分隔
-					paragraphs = []
-					for p in content.find_all(['p', 'div']):
-						text = p.get_text().strip()
-						if text:
-							paragraphs.append(text)
+					# 将HTML标签转换为换行
+					for tag in content.find_all(['p', 'div', 'br']):
+						tag.replace_with(tag.get_text() + '\n\n')
 					
-					# 如果没有找到段落标签，则按换行符分割
-					if not paragraphs:
-						paragraphs = [p.strip() for p in content_text.split('\n') if p.strip()]
+					# 获取处理后的文本
+					formatted_content = content.get_text()
 					
-					# 合并段落，保持适当的间距
-					formatted_content = '\n\n'.join(paragraphs)
+					# 清理多余的空白字符，但保留段落间的换行
+					formatted_content = re.sub(r'\n\s*\n\s*\n', '\n\n', formatted_content)
+					formatted_content = formatted_content.strip()
 					
 					# 处理图片
 					cover_list = content.find_all('img')
 					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
-					
-					# 使用原有的处理逻辑，保持2000字符限制
-					summary = re.sub(r"<.*?>|\n*", "", formatted_content)[:2000]
 					
 					entries.append(
 						{
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": summary,
+							"summary": formatted_content[:2000],
 							"content": entry.get("content"),
 							"cover": src
 						}
