@@ -150,8 +150,7 @@ def parse_rss_entries(url, retries=3):
 							"content": entry.get("content"),
 							"cover": src,
 							"notion_blocks": notion_blocks,  # 添加转换后的Notion块
-							"content_type": content_type,  # 添加内容类型
-							"status": "未读"  # 添加状态，默认为未读
+							"content_type": content_type  # 添加内容类型
 						}
 					)
 
