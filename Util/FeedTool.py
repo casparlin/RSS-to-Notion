@@ -118,13 +118,27 @@ def convert_html_to_notion_blocks(html_content):
 		elif element.name == 'figure':
 			img = element.find('img')
 			if img and img.get('src'):
-				# 使用段落替代图片
-				blocks.append({
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
-					}
-				})
+				try:
+					# 尝试添加图片块
+					blocks.append({
+						"type": "image",
+						"image": {
+							"type": "external",
+							"external": {
+								"url": img.get('src')
+							}
+						}
+					})
+					print(f"添加图片块: {img.get('src')}")
+				except Exception as e:
+					# 如果添加图片失败，使用文本替代
+					blocks.append({
+						"type": "paragraph",
+						"paragraph": {
+							"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+						}
+					})
+					print(f"添加图片块失败: {e}，使用文本替代")
 			figcaption = element.find('figcaption')
 			if figcaption:
 				blocks.append({
@@ -134,13 +148,27 @@ def convert_html_to_notion_blocks(html_content):
 					}
 				})
 		elif element.name == 'img' and element.get('src'):
-			# 使用段落替代图片
-			blocks.append({
-				"type": "paragraph",
-				"paragraph": {
-					"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
-				}
-			})
+			try:
+				# 尝试添加图片块
+				blocks.append({
+					"type": "image",
+					"image": {
+						"type": "external",
+						"external": {
+							"url": element.get('src')
+						}
+					}
+				})
+				print(f"添加图片块: {element.get('src')}")
+			except Exception as e:
+				# 如果添加图片失败，使用文本替代
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+					}
+				})
+				print(f"添加图片块失败: {e}，使用文本替代")
 	
 	print(f"转换完成，生成了 {len(blocks)} 个块")
 	if len(blocks) == 0:
@@ -235,12 +263,19 @@ def parse_rss_entries(url, retries=3):
 						if image_wrapper:
 							img = image_wrapper.find('img')
 							if img and img.get('src'):
-								# 使用默认封面图片
-								print(f"检测到原始图片URL: {img['src']}，但使用默认图片替代")
+								try:
+									# 尝试使用原始图片URL作为封面
+									cover_image = img.get('src')
+									print(f"使用原始图片URL作为封面: {cover_image}")
+								except Exception as e:
+									print(f"封面图片处理失败: {e}，使用默认图片")
 						else:
 							# 如果没有image-wrapper中的图片，使用第一张图片
-							print(f"检测到原始图片URL: {all_images[0]['src']}，但使用默认图片替代")
-					
+							try:
+								cover_image = all_images[0].get('src')
+								print(f"使用第一张图片URL作为封面: {cover_image}")
+							except Exception as e:
+								print(f"封面图片处理失败: {e}，使用默认图片")
 					# 转换HTML内容为Notion块
 					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
 					
@@ -362,8 +397,8 @@ class NotionAPI:
 		print(f"尝试保存到Notion - 标题: {entry.get('title')}")
 		print(f"链接: {entry.get('link')}")
 		
-		# 封面图片使用默认图片
-		cover_image = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg"
+		# 使用entry中的封面图片，如果不存在则使用默认图片
+		cover_image = entry.get("cover", "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg")
 		print(f"封面图片: {cover_image}")
 		
 		# 检查notion_blocks
