@@ -35,12 +35,33 @@ def convert_html_to_notion_blocks(html_content):
 					}
 				})
 		elif element.name == 'p':
-			blocks.append({
-				"type": "paragraph",
-				"paragraph": {
-					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-				}
-			})
+			# 处理图片包装器
+			if element.get('class') and 'image-wrapper' in element.get('class'):
+				img = element.find('img')
+				if img and img.get('src'):
+					blocks.append({
+						"type": "image",
+						"image": {
+							"type": "external",
+							"external": {"url": img['src']}
+						}
+					})
+			# 处理图片描述
+			elif element.get('class') and 'img-desc' in element.get('class'):
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+					}
+				})
+			# 处理普通段落
+			else:
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+					}
+				})
 		elif element.name == 'h1':
 			blocks.append({
 				"type": "heading_1",
@@ -145,12 +166,14 @@ def parse_rss_entries(url, retries=3):
 					# 选择最合适的封面图片
 					cover_image = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg"
 					if all_images:
-						# 优先选择figure中的图片
-						figure_images = cover.find_all('figure')
-						if figure_images:
-							cover_image = figure_images[0].find('img')['src']
+						# 优先选择image-wrapper中的图片
+						image_wrapper = cover.find('p', class_='image-wrapper')
+						if image_wrapper:
+							img = image_wrapper.find('img')
+							if img and img.get('src'):
+								cover_image = img['src']
 						else:
-							# 如果没有figure中的图片，使用第一张图片
+							# 如果没有image-wrapper中的图片，使用第一张图片
 							cover_image = all_images[0]['src']
 					
 					# 转换HTML内容为Notion块
