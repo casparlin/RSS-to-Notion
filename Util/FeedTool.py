@@ -18,19 +18,25 @@ def download_and_encode_image(image_url):
 	"""
 	下载图片并转换为 base64 编码
 	"""
+	print(f"\n开始处理图片: {image_url}")
 	try:
 		response = requests.get(image_url, timeout=10)
+		print(f"图片下载状态码: {response.status_code}")
 		if response.status_code == 200:
 			# 获取图片的 MIME 类型
 			content_type = response.headers.get('content-type', 'image/jpeg')
+			print(f"图片类型: {content_type}")
 			# 将图片内容转换为 base64
 			image_data = base64.b64encode(response.content).decode('utf-8')
+			print(f"图片大小: {len(image_data)} bytes")
 			return {
 				'type': 'file',
 				'file': {
 					'url': f'data:{content_type};base64,{image_data}'
 				}
 			}
+		else:
+			print(f"图片下载失败，状态码: {response.status_code}")
 	except Exception as e:
 		print(f"下载图片失败: {image_url}, 错误: {str(e)}")
 	return None
@@ -94,20 +100,30 @@ def parse_rss_entries(url, retries=3):
 					
 					# 处理图片
 					cover_list = content.find_all('img')
+					print(f"\n找到 {len(cover_list)} 个图片标签")
 					src = None
 					if cover_list:
 						img_src = cover_list[0].get('src', '')
+						print(f"原始图片链接: {img_src}")
 						# 处理相对路径
 						if img_src.startswith('//'):
 							img_src = 'https:' + img_src
+							print(f"处理协议相对路径后的链接: {img_src}")
 						elif img_src.startswith('/'):
 							# 从 entry.link 中提取域名
 							parsed_url = urlparse(entry.get("link", ""))
 							base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
 							img_src = base_url + img_src
+							print(f"处理根相对路径后的链接: {img_src}")
 						
 						# 下载并编码图片
 						src = download_and_encode_image(img_src)
+						if src:
+							print("图片处理成功")
+						else:
+							print("图片处理失败")
+					else:
+						print("未找到图片标签")
 					
 					entries.append(
 						{
