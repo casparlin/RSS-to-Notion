@@ -11,6 +11,15 @@ import time
 now = datetime.now(timezone.utc)
 load_time = 15  # 导入60天内的内容
 
+def count_chinese_chars(text):
+	"""计算中文字符数量"""
+	return len(re.findall(r'[\u4e00-\u9fff]', text))
+
+def get_content_type(content):
+	"""根据内容长度判断是长文还是简讯"""
+	chinese_count = count_chinese_chars(content)
+	return "长文" if chinese_count > 300 else "简讯"
+
 def convert_html_to_notion_blocks(html_content):
 	"""将HTML内容转换为Notion块格式"""
 	soup = BeautifulSoup(html_content, 'html.parser')
@@ -128,6 +137,10 @@ def parse_rss_entries(url, retries=3):
 					# 转换HTML内容为Notion块
 					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
 					
+					# 获取内容类型
+					content = entry.get("summary", "")
+					content_type = get_content_type(content)
+					
 					entries.append(
 						{
 							"title": entry.get("title"),
@@ -136,7 +149,9 @@ def parse_rss_entries(url, retries=3):
 							"summary": entry.get("summary"),  # 保留原始HTML内容
 							"content": entry.get("content"),
 							"cover": src,
-							"notion_blocks": notion_blocks  # 添加转换后的Notion块
+							"notion_blocks": notion_blocks,  # 添加转换后的Notion块
+							"content_type": content_type,  # 添加内容类型
+							"status": "未读"  # 添加状态，默认为未读
 						}
 					)
 
@@ -216,7 +231,7 @@ class NotionAPI:
 		"""
 		Save entry lists into reading database
 
-		params: entry("title", "link", "time", "summary", "notion_blocks"), page_id
+		params: entry("title", "link", "time", "summary", "notion_blocks", "content_type", "status"), page_id
 
 		return:
 		api response from notion
@@ -244,6 +259,16 @@ class NotionAPI:
 				},
 				"Tag": {
 					"multi_select": [{"name": tag[0], "color": tag[1]} for tag in tags]
+				},
+				"Content Type": {
+					"select": {
+						"name": entry.get("content_type", "简讯")
+					}
+				},
+				"Status": {
+					"select": {
+						"name": entry.get("status", "未读")
+					}
 				}
 			},
 			"children": entry.get("notion_blocks", [])  # 使用转换后的Notion块
