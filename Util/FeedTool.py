@@ -94,6 +94,7 @@ def convert_html_to_notion_blocks(html_content):
 def parse_rss_entries(url, retries=3):
 	entries = []
 	feeds = []
+	print(f"\n开始解析RSS源: {url}")
 	for attempt in range(retries):
 		try:
 			res = requests.get(
@@ -101,6 +102,7 @@ def parse_rss_entries(url, retries=3):
 				headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.55 Safari/537.36 Edg/96.0.1054.34"},
 			)
 			error_code = 0
+			print(f"成功获取RSS内容，状态码: {res.status_code}")
 		except requests.exceptions.ProxyError as e:
 			print(f"Load {url} Error, Attempt {attempt + 1} failed: {e}")
 			time.sleep(1)  # 等待1秒后重试
@@ -121,7 +123,9 @@ def parse_rss_entries(url, retries=3):
 				"link": url,
 				"status": "Active"
 			}
+			print(f"RSS源标题: {feed_title}")
 
+			entry_count = 0
 			for entry in parsed_feed.entries:
 				if entry.get("published"):
 					published_time = parser.parse(entry.get("published"))
@@ -129,7 +133,15 @@ def parse_rss_entries(url, retries=3):
 					published_time = datetime.now(timezone.utc)
 				if not published_time.tzinfo:
 					published_time = published_time.replace(tzinfo=timezone(timedelta(hours=8)))
+				
+				# 打印时间信息
+				print(f"\n文章: {entry.get('title')}")
+				print(f"发布时间: {published_time}")
+				print(f"当前时间: {now}")
+				print(f"时间差: {now - published_time}")
+				
 				if now - published_time < timedelta(days=load_time):
+					entry_count += 1
 					cover = BeautifulSoup(entry.get("summary"),'html.parser')
 					cover_list = cover.find_all('img')
 					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
@@ -146,24 +158,27 @@ def parse_rss_entries(url, retries=3):
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": entry.get("summary"),  # 保留原始HTML内容
+							"summary": entry.get("summary"),
 							"content": entry.get("content"),
 							"cover": src,
-							"notion_blocks": notion_blocks,  # 添加转换后的Notion块
-							"content_type": content_type  # 添加内容类型
+							"notion_blocks": notion_blocks,
+							"content_type": content_type
 						}
 					)
+					print(f"已添加文章: {entry.get('title')}")
+				else:
+					print(f"文章已过期: {entry.get('title')}")
 
+			print(f"\n总共找到 {len(parsed_feed.entries)} 篇文章")
+			print(f"符合时间要求的有 {entry_count} 篇")
 			return feeds, entries[:50]
-			# return feeds, entries[:3]	
 		
 	feeds = {
 		"title": "Unknown",
 		"link": url,
 		"status": "Error"
 	}
-
-		
+	
 	return feeds, None
 
 
@@ -235,6 +250,7 @@ class NotionAPI:
 		return:
 		api response from notion
 		"""
+		print(f"\n准备保存文章到Notion: {entry.get('title')}")
 		# 首先创建页面
 		payload = {
 			"parent": {"database_id": self.reader_id},
@@ -265,11 +281,13 @@ class NotionAPI:
 					}
 				}
 			},
-			"children": entry.get("notion_blocks", [])  # 使用转换后的Notion块
+			"children": entry.get("notion_blocks", [])
 		}
 		
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
-		print(res.status_code)
+		print(f"保存状态码: {res.status_code}")
+		if res.status_code != 200:
+			print(f"保存失败，错误信息: {res.text}")
 		return res
 	
 	def saveFeed_to_notion(self, prop, page_id):
