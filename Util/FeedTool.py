@@ -9,7 +9,7 @@ from dateutil import parser
 import time
 
 now = datetime.now(timezone.utc)
-load_time = 60  # 导入60天内的内容
+load_time = 15  # 导入60天内的内容
 
 def convert_html_to_notion_blocks(html_content):
 	"""将HTML内容转换为Notion块格式"""
