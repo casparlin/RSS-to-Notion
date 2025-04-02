@@ -11,6 +11,76 @@ import time
 now = datetime.now(timezone.utc)
 load_time = 60  # 导入60天内的内容
 
+def convert_html_to_notion_blocks(html_content):
+	"""将HTML内容转换为Notion块格式"""
+	soup = BeautifulSoup(html_content, 'html.parser')
+	blocks = []
+	
+	for element in soup.children:
+		if element.name is None:  # 纯文本
+			if element.strip():
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": element.strip()}}]
+					}
+				})
+		elif element.name == 'p':
+			blocks.append({
+				"type": "paragraph",
+				"paragraph": {
+					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+				}
+			})
+		elif element.name == 'h1':
+			blocks.append({
+				"type": "heading_1",
+				"heading_1": {
+					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+				}
+			})
+		elif element.name == 'h2':
+			blocks.append({
+				"type": "heading_2",
+				"heading_2": {
+					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+				}
+			})
+		elif element.name == 'h3':
+			blocks.append({
+				"type": "heading_3",
+				"heading_3": {
+					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+				}
+			})
+		elif element.name == 'ul':
+			for li in element.find_all('li'):
+				blocks.append({
+					"type": "bulleted_list_item",
+					"bulleted_list_item": {
+						"rich_text": [{"type": "text", "text": {"content": li.get_text()}}]
+					}
+				})
+		elif element.name == 'figure':
+			img = element.find('img')
+			if img and img.get('src'):
+				blocks.append({
+					"type": "image",
+					"image": {
+						"type": "external",
+						"external": {"url": img['src']}
+					}
+				})
+			figcaption = element.find('figcaption')
+			if figcaption:
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": figcaption.get_text()}}]
+					}
+				})
+	
+	return blocks
 
 def parse_rss_entries(url, retries=3):
 	entries = []
@@ -54,17 +124,21 @@ def parse_rss_entries(url, retries=3):
 					cover = BeautifulSoup(entry.get("summary"),'html.parser')
 					cover_list = cover.find_all('img')
 					src = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg" if not cover_list else cover_list[0]['src']
-					# Use re.search to find the first match
+					
+					# 转换HTML内容为Notion块
+					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
+					
 					entries.append(
 						{
 							"title": entry.get("title"),
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
-							"summary": re.sub(r"<.*?>|\n*", "", entry.get("summary"))[:2000],
+							"summary": entry.get("summary"),  # 保留原始HTML内容
 							"content": entry.get("content"),
-							"cover": src
+							"cover": src,
+							"notion_blocks": notion_blocks  # 添加转换后的Notion块
 						}
-				)
+					)
 
 			return feeds, entries[:50]
 			# return feeds, entries[:3]	
@@ -142,13 +216,12 @@ class NotionAPI:
 		"""
 		Save entry lists into reading database
 
-		params: entry("title", "link", "time", "summary"), page_id
+		params: entry("title", "link", "time", "summary", "notion_blocks"), page_id
 
 		return:
 		api response from notion
 		"""
-		# print(entry.get("cover"))
-		# Construct post request to reading database
+		# 首先创建页面
 		payload = {
 			"parent": {"database_id": self.reader_id},
 			"cover": {
@@ -173,23 +246,10 @@ class NotionAPI:
 					"multi_select": [{"name": tag[0], "color": tag[1]} for tag in tags]
 				}
 			},
-			"children": [
-				{
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [
-							{
-								"type": "text",
-								"text": {"content": entry.get("summary")},
-							}
-						]
-					},
-				}
-			],
+			"children": entry.get("notion_blocks", [])  # 使用转换后的Notion块
 		}
+		
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
-
-
 		print(res.status_code)
 		return res
 	
