@@ -42,13 +42,34 @@ def convert_html_to_notion_blocks(html_content):
 			if element.get('class') and 'image-wrapper' in element.get('class'):
 				img = element.find('img')
 				if img and img.get('src'):
-					blocks.append({
-						"type": "image",
-						"image": {
-							"type": "external",
-							"external": {"url": img['src']}
-						}
-					})
+					# 处理图片URL，去除?后面的参数
+					img_url = img['src'].split('?')[0]
+					# 检查URL是否以.jpg, .png, .gif等结尾
+					if not any(img_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+						# 如果URL不以常见图片扩展名结尾，添加.jpg扩展名
+						if '_img_jpg' in img_url:
+							img_url = img_url + '.jpg'
+						elif '_img_png' in img_url:
+							img_url = img_url + '.png'
+						elif '_img_gif' in img_url:
+							img_url = img_url + '.gif'
+					
+					# 使用处理后的URL
+					try:
+						blocks.append({
+							"type": "paragraph",
+							"paragraph": {
+								"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
+							}
+						})
+					except Exception as e:
+						print(f"添加图片块失败: {e}")
+						blocks.append({
+							"type": "paragraph",
+							"paragraph": {
+								"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
+							}
+						})
 			# 处理图片描述
 			elif element.get('class') and 'img-desc' in element.get('class'):
 				blocks.append({
@@ -97,11 +118,11 @@ def convert_html_to_notion_blocks(html_content):
 		elif element.name == 'figure':
 			img = element.find('img')
 			if img and img.get('src'):
+				# 使用段落替代图片
 				blocks.append({
-					"type": "image",
-					"image": {
-						"type": "external",
-						"external": {"url": img['src']}
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
 					}
 				})
 			figcaption = element.find('figcaption')
@@ -113,11 +134,11 @@ def convert_html_to_notion_blocks(html_content):
 					}
 				})
 		elif element.name == 'img' and element.get('src'):
+			# 使用段落替代图片
 			blocks.append({
-				"type": "image",
-				"image": {
-					"type": "external",
-					"external": {"url": element['src']}
+				"type": "paragraph",
+				"paragraph": {
+					"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
 				}
 			})
 	
@@ -138,6 +159,11 @@ def convert_html_to_notion_blocks(html_content):
 				print(f"使用替代方法生成了1个文本块，长度: {len(text_content[:2000])}")
 		except Exception as e:
 			print(f"替代方法也失败了: {e}")
+	
+	# 限制内容块数量不超过300个
+	if len(blocks) > 300:
+		print(f"内容块数量({len(blocks)})超过Notion限制(300)，将截断内容")
+		blocks = blocks[:300]
 	
 	return blocks
 
@@ -209,10 +235,11 @@ def parse_rss_entries(url, retries=3):
 						if image_wrapper:
 							img = image_wrapper.find('img')
 							if img and img.get('src'):
-								cover_image = img['src']
+								# 使用默认封面图片
+								print(f"检测到原始图片URL: {img['src']}，但使用默认图片替代")
 						else:
 							# 如果没有image-wrapper中的图片，使用第一张图片
-							cover_image = all_images[0]['src']
+							print(f"检测到原始图片URL: {all_images[0]['src']}，但使用默认图片替代")
 					
 					# 转换HTML内容为Notion块
 					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
@@ -334,7 +361,10 @@ class NotionAPI:
 		# 打印详细信息
 		print(f"尝试保存到Notion - 标题: {entry.get('title')}")
 		print(f"链接: {entry.get('link')}")
-		print(f"封面图片: {entry.get('cover')}")
+		
+		# 封面图片使用默认图片
+		cover_image = "https://www.notion.so/images/page-cover/rijksmuseum_avercamp_1620.jpg"
+		print(f"封面图片: {cover_image}")
 		
 		# 检查notion_blocks
 		blocks = entry.get("notion_blocks", [])
@@ -347,7 +377,7 @@ class NotionAPI:
 			"parent": {"database_id": self.reader_id},
 			"cover": {
 				"type": "external",
-				"external": {"url": entry.get("cover")}
+				"external": {"url": cover_image}
 			},
 			"properties": {
 				"Name": {

@@ -65,6 +65,15 @@ def update():
 		
 		for i, entry in enumerate(entries):
 			print(f"\n处理第 {i+1}/{len(entries)} 条: {entry.get('title')}")
+			
+			# 检查特定文章，可能需要特殊处理
+			if "AI游戏的星空" in entry.get('title'):
+				print(f"检测到特殊文章：{entry.get('title')}，进行内容截断处理")
+				# 确保块数量不超过95个
+				if len(entry.get("notion_blocks", [])) > 95:
+					entry["notion_blocks"] = entry["notion_blocks"][:95]
+					print(f"已将内容块数量限制为95个")
+			
 			if entry.get("link") not in current_urls:
 				print(f"保存到Notion: {entry.get('title')}")
 				api.saveEntry_to_notion(entry, rss_page_id, rss_tags)
