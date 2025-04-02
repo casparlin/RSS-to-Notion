@@ -25,6 +25,9 @@ def convert_html_to_notion_blocks(html_content):
 	soup = BeautifulSoup(html_content, 'html.parser')
 	blocks = []
 	
+	print(f"开始转换HTML - 内容长度: {len(html_content)}")
+	print(f"HTML内容前200字符: {html_content[:200]}")
+	
 	for element in soup.children:
 		if element.name is None:  # 纯文本
 			if element.strip():
@@ -117,6 +120,24 @@ def convert_html_to_notion_blocks(html_content):
 					"external": {"url": element['src']}
 				}
 			})
+	
+	print(f"转换完成，生成了 {len(blocks)} 个块")
+	if len(blocks) == 0:
+		print("警告: 没有生成任何块! 尝试替代方法...")
+		# 如果没有生成任何块，尝试使用替代方法
+		try:
+			# 直接使用整个soup对象
+			text_content = soup.get_text().strip()
+			if text_content:
+				blocks.append({
+					"type": "paragraph",
+					"paragraph": {
+						"rich_text": [{"type": "text", "text": {"content": text_content[:2000]}}]
+					}
+				})
+				print(f"使用替代方法生成了1个文本块，长度: {len(text_content[:2000])}")
+		except Exception as e:
+			print(f"替代方法也失败了: {e}")
 	
 	return blocks
 
@@ -310,6 +331,17 @@ class NotionAPI:
 		return:
 		api response from notion
 		"""
+		# 打印详细信息
+		print(f"尝试保存到Notion - 标题: {entry.get('title')}")
+		print(f"链接: {entry.get('link')}")
+		print(f"封面图片: {entry.get('cover')}")
+		
+		# 检查notion_blocks
+		blocks = entry.get("notion_blocks", [])
+		print(f"内容块数量: {len(blocks)}")
+		if len(blocks) == 0:
+			print("警告: 没有内容块!")
+		
 		# 首先创建页面
 		payload = {
 			"parent": {"database_id": self.reader_id},
@@ -344,7 +376,9 @@ class NotionAPI:
 		}
 		
 		res = requests.post(url=self.NOTION_API_pages, headers=self.headers, json=payload)
-		print(res.status_code)
+		print(f"保存结果: 状态码 {res.status_code}")
+		if res.status_code != 200:
+			print(f"保存失败: {res.text}")
 		return res
 	
 	def saveFeed_to_notion(self, prop, page_id):
