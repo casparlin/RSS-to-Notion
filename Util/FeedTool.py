@@ -153,11 +153,23 @@ def parse_rss_entries(url, retries=3):
 
 			for entry in parsed_feed.entries:
 				if entry.get("published"):
-					published_time = parser.parse(entry.get("published"))
+					try:
+						published_time = parser.parse(entry.get("published"))
+					except Exception as e:
+						print(f"时间解析错误: {entry.get('published')}, 错误信息: {e}")
+						published_time = datetime.now(timezone.utc)
 				else:
 					published_time = datetime.now(timezone.utc)
+				
+				# 确保时间有时区信息
 				if not published_time.tzinfo:
 					published_time = published_time.replace(tzinfo=timezone(timedelta(hours=8)))
+				
+				# 验证时间是否有效
+				if published_time > datetime.now(timezone.utc):
+					print(f"警告：发现未来时间 {published_time}，将使用当前时间")
+					published_time = datetime.now(timezone.utc)
+				
 				if now - published_time < timedelta(days=load_time):
 					# 获取所有图片
 					cover = BeautifulSoup(entry.get("summary"),'html.parser')
@@ -195,6 +207,14 @@ def parse_rss_entries(url, retries=3):
 						}
 					)
 
+			# 对 entries 按发布时间进行排序（最新的在前）
+			try:
+				entries = sorted(entries, key=lambda x: parser.parse(x['time']), reverse=True)
+			except Exception as e:
+				print(f"排序时发生错误: {e}")
+				# 如果排序失败，保持原始顺序
+				pass
+			
 			return feeds, entries[:50]
 			# return feeds, entries[:3]	
 		
