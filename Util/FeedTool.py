@@ -1,5 +1,5 @@
 import feedparser
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 
 import re
 import json
@@ -28,96 +28,292 @@ def convert_html_to_notion_blocks(html_content):
 	print(f"开始转换HTML - 内容长度: {len(html_content)}")
 	print(f"HTML内容前200字符: {html_content[:200]}")
 	
-	for element in soup.children:
-		if element.name is None:  # 纯文本
-			if element.strip():
+	# 处理南方周末(infzm)的特殊结构
+	nfzm_fulltext = soup.find('div', class_='nfzm-content__fulltext')
+	if nfzm_fulltext:
+		print(f"检测到南方周末(infzm)特殊内容结构，直接提取nfzm-content__fulltext内容")
+		# 移除HTML注释
+		for comment in nfzm_fulltext.find_all(text=lambda text: isinstance(text, Comment)):
+			comment.extract()
+		
+		# 提取fulltext内部的有效内容
+		valid_content = nfzm_fulltext.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'ul', 'ol', 'figure', 'img'])
+		if valid_content:
+			for element in valid_content:
+				if element.name == 'p':
+					if element.get('class') and 'image-wrapper' in element.get('class'):
+						img = element.find('img')
+						if img and img.get('src'):
+							# 处理图片URL，去除?后面的参数
+							img_url = img['src'].split('?')[0]
+							# 检查URL是否以.jpg, .png, .gif等结尾
+							if not any(img_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+								# 如果URL不以常见图片扩展名结尾，添加.jpg扩展名
+								if '_img_jpg' in img_url:
+									img_url = img_url + '.jpg'
+								elif '_img_png' in img_url:
+									img_url = img_url + '.png'
+								elif '_img_gif' in img_url:
+									img_url = img_url + '.gif'
+							
+							# 使用处理后的URL创建图片块，而不是文本块
+							try:
+								blocks.append({
+									"type": "image",
+									"image": {
+										"type": "external",
+										"external": {
+											"url": img_url
+										}
+									}
+								})
+								print(f"添加图片块: {img_url}")
+							except Exception as e:
+								print(f"添加图片块失败: {e}")
+								blocks.append({
+									"type": "paragraph",
+									"paragraph": {
+										"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+									}
+								})
+					# 处理图片描述
+					elif element.get('class') and 'img-desc' in element.get('class'):
+						blocks.append({
+							"type": "paragraph",
+							"paragraph": {
+								"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+							}
+						})
+					# 处理普通段落
+					else:
+						text_content = element.get_text().strip()
+						if text_content:  # 只添加非空段落
+							blocks.append({
+								"type": "paragraph",
+								"paragraph": {
+									"rich_text": [{"type": "text", "text": {"content": text_content}}]
+								}
+							})
+				elif element.name == 'h1':
+					blocks.append({
+						"type": "heading_1",
+						"heading_1": {
+							"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+						}
+					})
+				elif element.name == 'h2':
+					blocks.append({
+						"type": "heading_2",
+						"heading_2": {
+							"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+						}
+					})
+				elif element.name == 'h3':
+					blocks.append({
+						"type": "heading_3",
+						"heading_3": {
+							"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+						}
+					})
+				elif element.name == 'ul':
+					for li in element.find_all('li'):
+						blocks.append({
+							"type": "bulleted_list_item",
+							"bulleted_list_item": {
+								"rich_text": [{"type": "text", "text": {"content": li.get_text()}}]
+							}
+						})
+				elif element.name == 'figure':
+					img = element.find('img')
+					if img and img.get('src'):
+						try:
+							# 尝试添加图片块
+							blocks.append({
+								"type": "image",
+								"image": {
+									"type": "external",
+									"external": {
+										"url": img.get('src')
+									}
+								}
+							})
+							print(f"添加图片块: {img.get('src')}")
+						except Exception as e:
+							# 如果添加图片失败，使用文本替代
+							blocks.append({
+								"type": "paragraph",
+								"paragraph": {
+									"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+								}
+							})
+							print(f"添加图片块失败: {e}，使用文本替代")
+					figcaption = element.find('figcaption')
+					if figcaption:
+						blocks.append({
+							"type": "paragraph",
+							"paragraph": {
+								"rich_text": [{"type": "text", "text": {"content": figcaption.get_text()}}]
+							}
+						})
+				elif element.name == 'img' and element.get('src'):
+					try:
+						# 尝试添加图片块
+						blocks.append({
+							"type": "image",
+							"image": {
+								"type": "external",
+								"external": {
+									"url": element.get('src')
+								}
+							}
+						})
+						print(f"添加图片块: {element.get('src')}")
+					except Exception as e:
+						# 如果添加图片失败，使用文本替代
+						blocks.append({
+							"type": "paragraph",
+							"paragraph": {
+								"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+							}
+						})
+						print(f"添加图片块失败: {e}，使用文本替代")
+		else:
+			# 如果没有找到valid_content，使用整个nfzm_fulltext的文本内容
+			text_content = nfzm_fulltext.get_text().strip()
+			if text_content:
 				blocks.append({
 					"type": "paragraph",
 					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": element.strip()}}]
+						"rich_text": [{"type": "text", "text": {"content": text_content[:2000]}}]
 					}
 				})
-		elif element.name == 'p':
-			# 处理图片包装器
-			if element.get('class') and 'image-wrapper' in element.get('class'):
+				print(f"使用南方周末文本内容生成了1个文本块，长度: {len(text_content[:2000])}")
+	else:
+		# 原有的处理逻辑，处理非南方周末的一般RSS内容
+		for element in soup.children:
+			if element.name is None:  # 纯文本
+				if element.strip():
+					blocks.append({
+						"type": "paragraph",
+						"paragraph": {
+							"rich_text": [{"type": "text", "text": {"content": element.strip()}}]
+						}
+					})
+			elif element.name == 'p':
+				# 处理图片包装器
+				if element.get('class') and 'image-wrapper' in element.get('class'):
+					img = element.find('img')
+					if img and img.get('src'):
+						# 处理图片URL，去除?后面的参数
+						img_url = img['src'].split('?')[0]
+						# 检查URL是否以.jpg, .png, .gif等结尾
+						if not any(img_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+							# 如果URL不以常见图片扩展名结尾，添加.jpg扩展名
+							if '_img_jpg' in img_url:
+								img_url = img_url + '.jpg'
+							elif '_img_png' in img_url:
+								img_url = img_url + '.png'
+							elif '_img_gif' in img_url:
+								img_url = img_url + '.gif'
+						
+						# 使用处理后的URL创建图片块，而不是文本块
+						try:
+							blocks.append({
+								"type": "image",
+								"image": {
+									"type": "external",
+									"external": {
+										"url": img_url
+									}
+								}
+							})
+							print(f"添加图片块: {img_url}")
+						except Exception as e:
+							print(f"添加图片块失败: {e}")
+							blocks.append({
+								"type": "paragraph",
+								"paragraph": {
+									"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
+								}
+							})
+				# 处理图片描述
+				elif element.get('class') and 'img-desc' in element.get('class'):
+					blocks.append({
+						"type": "paragraph",
+						"paragraph": {
+							"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+						}
+					})
+				# 处理普通段落
+				else:
+					blocks.append({
+						"type": "paragraph",
+						"paragraph": {
+							"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+						}
+					})
+			elif element.name == 'h1':
+				blocks.append({
+					"type": "heading_1",
+					"heading_1": {
+						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+					}
+				})
+			elif element.name == 'h2':
+				blocks.append({
+					"type": "heading_2",
+					"heading_2": {
+						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+					}
+				})
+			elif element.name == 'h3':
+				blocks.append({
+					"type": "heading_3",
+					"heading_3": {
+						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
+					}
+				})
+			elif element.name == 'ul':
+				for li in element.find_all('li'):
+					blocks.append({
+						"type": "bulleted_list_item",
+						"bulleted_list_item": {
+							"rich_text": [{"type": "text", "text": {"content": li.get_text()}}]
+						}
+					})
+			elif element.name == 'figure':
 				img = element.find('img')
 				if img and img.get('src'):
-					# 处理图片URL，去除?后面的参数
-					img_url = img['src'].split('?')[0]
-					# 检查URL是否以.jpg, .png, .gif等结尾
-					if not any(img_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-						# 如果URL不以常见图片扩展名结尾，添加.jpg扩展名
-						if '_img_jpg' in img_url:
-							img_url = img_url + '.jpg'
-						elif '_img_png' in img_url:
-							img_url = img_url + '.png'
-						elif '_img_gif' in img_url:
-							img_url = img_url + '.gif'
-					
-					# 使用处理后的URL
 					try:
+						# 尝试添加图片块
 						blocks.append({
-							"type": "paragraph",
-							"paragraph": {
-								"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
+							"type": "image",
+							"image": {
+								"type": "external",
+								"external": {
+									"url": img.get('src')
+								}
 							}
 						})
+						print(f"添加图片块: {img.get('src')}")
 					except Exception as e:
-						print(f"添加图片块失败: {e}")
+						# 如果添加图片失败，使用文本替代
 						blocks.append({
 							"type": "paragraph",
 							"paragraph": {
-								"rich_text": [{"type": "text", "text": {"content": "[图片]"}}]
+								"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
 							}
 						})
-			# 处理图片描述
-			elif element.get('class') and 'img-desc' in element.get('class'):
-				blocks.append({
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-					}
-				})
-			# 处理普通段落
-			else:
-				blocks.append({
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-					}
-				})
-		elif element.name == 'h1':
-			blocks.append({
-				"type": "heading_1",
-				"heading_1": {
-					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-				}
-			})
-		elif element.name == 'h2':
-			blocks.append({
-				"type": "heading_2",
-				"heading_2": {
-					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-				}
-			})
-		elif element.name == 'h3':
-			blocks.append({
-				"type": "heading_3",
-				"heading_3": {
-					"rich_text": [{"type": "text", "text": {"content": element.get_text()}}]
-				}
-			})
-		elif element.name == 'ul':
-			for li in element.find_all('li'):
-				blocks.append({
-					"type": "bulleted_list_item",
-					"bulleted_list_item": {
-						"rich_text": [{"type": "text", "text": {"content": li.get_text()}}]
-					}
-				})
-		elif element.name == 'figure':
-			img = element.find('img')
-			if img and img.get('src'):
+						print(f"添加图片块失败: {e}，使用文本替代")
+				figcaption = element.find('figcaption')
+				if figcaption:
+					blocks.append({
+						"type": "paragraph",
+						"paragraph": {
+							"rich_text": [{"type": "text", "text": {"content": figcaption.get_text()}}]
+						}
+					})
+			elif element.name == 'img' and element.get('src'):
 				try:
 					# 尝试添加图片块
 					blocks.append({
@@ -125,11 +321,11 @@ def convert_html_to_notion_blocks(html_content):
 						"image": {
 							"type": "external",
 							"external": {
-								"url": img.get('src')
+								"url": element.get('src')
 							}
 						}
 					})
-					print(f"添加图片块: {img.get('src')}")
+					print(f"添加图片块: {element.get('src')}")
 				except Exception as e:
 					# 如果添加图片失败，使用文本替代
 					blocks.append({
@@ -139,36 +335,6 @@ def convert_html_to_notion_blocks(html_content):
 						}
 					})
 					print(f"添加图片块失败: {e}，使用文本替代")
-			figcaption = element.find('figcaption')
-			if figcaption:
-				blocks.append({
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": figcaption.get_text()}}]
-					}
-				})
-		elif element.name == 'img' and element.get('src'):
-			try:
-				# 尝试添加图片块
-				blocks.append({
-					"type": "image",
-					"image": {
-						"type": "external",
-						"external": {
-							"url": element.get('src')
-						}
-					}
-				})
-				print(f"添加图片块: {element.get('src')}")
-			except Exception as e:
-				# 如果添加图片失败，使用文本替代
-				blocks.append({
-					"type": "paragraph",
-					"paragraph": {
-						"rich_text": [{"type": "text", "text": {"content": "[图片加载失败]"}}]
-					}
-				})
-				print(f"添加图片块失败: {e}，使用文本替代")
 	
 	print(f"转换完成，生成了 {len(blocks)} 个块")
 	if len(blocks) == 0:
