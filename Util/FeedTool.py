@@ -276,11 +276,30 @@ def parse_rss_entries(url, retries=3):
 								print(f"使用第一张图片URL作为封面: {cover_image}")
 							except Exception as e:
 								print(f"封面图片处理失败: {e}，使用默认图片")
+					
+					# 获取完整的HTML内容 - 修改这里优先使用content字段
+					html_content = ""
+					if entry.get("content"):  # 首先尝试使用content字段
+						try:
+							html_content = entry.get("content")[0].get("value", "")
+							print(f"使用content字段作为内容源，长度: {len(html_content)}")
+						except (IndexError, KeyError, TypeError) as e:
+							print(f"从content获取内容失败: {e}")
+							html_content = ""
+					
+					if not html_content and entry.get("content:encoded"):  # 然后尝试使用content:encoded字段
+						html_content = entry.get("content:encoded")
+						print(f"使用content:encoded字段作为内容源，长度: {len(html_content)}")
+					
+					if not html_content:  # 最后才使用summary字段
+						html_content = entry.get("summary", "")
+						print(f"使用summary字段作为内容源，长度: {len(html_content)}")
+					
 					# 转换HTML内容为Notion块
-					notion_blocks = convert_html_to_notion_blocks(entry.get("summary"))
+					notion_blocks = convert_html_to_notion_blocks(html_content)
 					
 					# 计算内容类型
-					content_type = get_content_type(entry.get("summary", ""))
+					content_type = get_content_type(html_content)
 					
 					entries.append(
 						{
@@ -288,7 +307,7 @@ def parse_rss_entries(url, retries=3):
 							"link": entry.get("link"),
 							"time": published_time.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S%z"),
 							"summary": entry.get("summary"),  # 保留原始HTML内容
-							"content": entry.get("content"),
+							"content": html_content,  # 保存完整的HTML内容
 							"cover": cover_image,
 							"notion_blocks": notion_blocks,  # 添加转换后的Notion块
 							"content_type": content_type  # 添加内容类型

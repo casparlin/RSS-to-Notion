@@ -16,6 +16,9 @@ def update():
 		print("NOTION_SEC secrets is not set!")
 		return
 
+	print("RSS-to-Notion 启动，版本：4.0.1 (修复RSS内容提取)")
+	print("包含RSS全文提取优化：优先使用content字段而非summary字段，以获取完整文章内容")
+	
 	api = NotionAPI(NOTION_API_KEY, NOTION_READING_DATABASE_ID, NOTION_URL_DATABASE_ID)
 
 	rss_feed_list = api.queryFeed_from_notion()
